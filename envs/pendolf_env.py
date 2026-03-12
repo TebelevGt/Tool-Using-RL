@@ -219,7 +219,7 @@ class PendolfVerifier(TrajectoryVerifier):
             + m["steps"] * 0.05
             + m["tool_calls"] * 0.02
         )
-        m["total_reward"] = outcome - shaping
+        m["total_reward"] += outcome - shaping
 
         return m
 

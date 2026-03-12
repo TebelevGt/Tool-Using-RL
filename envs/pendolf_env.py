@@ -2,6 +2,7 @@ import random
 import re
 from typing import Optional, Tuple, Dict, Any, List
 from envs.base_classes import ToolEnv, Data, TrajectoryVerifier
+from envs.prompts import SYSTEM_PROMPT
 import os
 from torch.utils.data import Dataset
 import pickle
@@ -239,8 +240,8 @@ def grpo_env_reward_func(prompts, completions, **kwargs):
     return [
         verifier.verify_trajectory(
             env,
-            Data(question=p, answer=extract_text(c), difficulty=1, metadata=m),
-            extract_text(c).split("\n"),  # Теперь split вызывается у строки!
+            Data(question=p, answer=c[0]["content"], difficulty=1, metadata=m),
+            c[0]["content"],  # Теперь split вызывается у строки!
         )["total_reward"]
         for p, c, m in zip(prompts, completions, metadatas)
     ]

@@ -227,6 +227,7 @@ class PendolfVerifier(TrajectoryVerifier):
 def grpo_env_reward_func(prompts, completions, **kwargs):
     env, verifier = PendolfEnv(), PendolfVerifier()
     metadatas = kwargs.get("metadata", [{}] * len(prompts))
+    print("prompts: \n", prompts[0], "completions: \n", completions[0], "metadatas: \n", metadatas[0])
 
     # Извлекаем текст из структуры completions
     # completion может быть либо списком словарей, либо просто строкой

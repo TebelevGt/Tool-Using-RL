@@ -228,9 +228,18 @@ def grpo_env_reward_func(prompts, completions, **kwargs):
     env, verifier = PendolfEnv(), PendolfVerifier()
     metadatas = kwargs.get("metadata", [{}] * len(prompts))
 
+    # Извлекаем текст из структуры completions
+    # completion может быть либо списком словарей, либо просто строкой
+    def extract_text(c):
+        if isinstance(c, list) and len(c) > 0 and isinstance(c[0], dict):
+            return c[0].get("content", "")
+        return str(c)
+
     return [
-        verifier.verify_trajectory(env, Data(question=p, answer=c, difficulty=1, metadata=m), c.split("\n"))[
-            "total_reward"
-        ]
+        verifier.verify_trajectory(
+            env,
+            Data(question=p, answer=extract_text(c), difficulty=1, metadata=m),
+            extract_text(c).split("\n"),  # Теперь split вызывается у строки!
+        )["total_reward"]
         for p, c, m in zip(prompts, completions, metadatas)
     ]

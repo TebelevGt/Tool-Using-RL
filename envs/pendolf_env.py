@@ -24,17 +24,17 @@ class PendolfEnv(ToolEnv):
         return data.question
 
     def step(self, action: str) -> Tuple[str, float, bool, Dict[str, Any]]:
-        """Парсинг экшена от LLM и симуляция ответа базы."""
         observation = ""
         reward = 0.0
         done = False
 
-        # ИСПОЛЬЗУЕМ .lower(), чтобы ловить Action, ACTION, action
         if "action:" not in action.lower():
-            done = True
-            # Простая эвристика награды
-            reward = 1.0 if "надуть" in action.lower() or "монеты" in action.lower() else 0.0
-            return "Episode finished", reward, done, self.state
+            # Если это победная фраза (конец игры)
+            if "монеты" in action.lower() or "лжец" in action.lower():
+                return "Episode finished", 1.0, True, self.state
+
+            # В противном случае это просто МЫСЛЬ! Эпизод продолжается!
+            return "Observation: Thought recorded.", 0.0, False, self.state
 
         # Парсим вызов тула (добавил (?i) для регистра)
         match = re.search(r"(?i)Action:\s*(\w+)\('([^']+)'\)", action)
@@ -217,8 +217,11 @@ class PendolfVerifier(TrajectoryVerifier):
                 entities |= get_ents(obs)
 
             if done:
-                m["success"] = rew > 0
                 break
+
+        # Успех — это если мы заработали положительный reward от среды
+        # (например, +0.5 за take_item или +1.0 за финальную фразу)
+        m["success"] = m["total_reward"] > 0
 
         # Считаем outcome + shaping
         outcome = 1.0 if m["success"] else -1.0
@@ -230,7 +233,6 @@ class PendolfVerifier(TrajectoryVerifier):
             + m["tool_calls"] * 0.02
         )
 
-        # Добавляем outcome и вычитаем штрафы из того, что уже накопили
         m["total_reward"] += outcome - shaping
 
         return m

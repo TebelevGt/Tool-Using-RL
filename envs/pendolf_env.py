@@ -29,16 +29,15 @@ class PendolfEnv(ToolEnv):
         reward = 0.0
         done = False
 
-        # Если модель решила ответить текстом (нет Action)
-        if "Action:" not in action:
+        # ИСПОЛЬЗУЕМ .lower(), чтобы ловить Action, ACTION, action
+        if "action:" not in action.lower():
             done = True
-            # Простая эвристика награды: если Пендольф должен был ругаться (inventory == 0),
-            # и он это сделал, даем награду. Иначе штрафуем.
+            # Простая эвристика награды
             reward = 1.0 if "надуть" in action.lower() or "монеты" in action.lower() else 0.0
             return "Episode finished", reward, done, self.state
 
-        # Парсим вызов тула, например: Action: check_inventory('кристаллы')
-        match = re.search(r"Action:\s*(\w+)\('([^']+)'\)", action)
+        # Парсим вызов тула (добавил (?i) для регистра)
+        match = re.search(r"(?i)Action:\s*(\w+)\('([^']+)'\)", action)
         if not match:
             return "Observation: Error, invalid tool format.", -0.1, False, self.state
 
@@ -237,15 +236,10 @@ class PendolfVerifier(TrajectoryVerifier):
         return m
 
 
-# Функция-обертка для GRPOTrainer (reward_funcs)
 def grpo_env_reward_func(prompts, completions, **kwargs):
     env, verifier = PendolfEnv(), PendolfVerifier()
     metadatas = kwargs.get("metadata", [{}] * len(prompts))
-    print("*" * 30)
-    print("prompts: \n", prompts[0], "completions: \n", completions[0], "metadatas: \n", metadatas[0])
 
-    # Извлекаем текст из структуры completions
-    # completion может быть либо списком словарей, либо просто строкой
     def extract_text(c):
         if isinstance(c, list) and len(c) > 0 and isinstance(c[0], dict):
             return c[0].get("content", "")
@@ -254,8 +248,15 @@ def grpo_env_reward_func(prompts, completions, **kwargs):
     return [
         verifier.verify_trajectory(
             env,
-            Data(question=p, answer=c[0]["content"], difficulty=1, metadata=m),
-            c[0]["content"],  # Теперь split вызывается у строки!
+            # Достаем текст из юзера, чтобы не парсить системный промпт
+            Data(
+                question=p[-1]["content"] if isinstance(p, list) else str(p),
+                answer=extract_text(c),
+                difficulty=1,
+                metadata=m,
+            ),
+            # ВОТ ЗДЕСЬ ВЕРНУЛИ .split('\n') !!!
+            extract_text(c).split("\n"),
         )["total_reward"]
         for p, c, m in zip(prompts, completions, metadatas)
     ]

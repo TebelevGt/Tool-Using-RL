@@ -175,7 +175,6 @@ class PendolfVerifier(TrajectoryVerifier):
             "loops": 0,
         }
 
-        # Лямбда для парсинга сущностей
         get_ents = lambda text: set(re.findall(r"\b\w+\b", str(text).lower()))
         entities = get_ents(data.question) | get_ents(data.metadata)
 
@@ -186,31 +185,43 @@ class PendolfVerifier(TrajectoryVerifier):
             m["loops"] += int(act == last_act)
             last_act = act
 
+            # --- ХЛЕБНЫЕ КРОШКИ (чтобы std не был равен 0) ---
+            if "Мысль:" in act:
+                m["total_reward"] += 0.05  # Поощряем за попытку думать
+            if "Action:" in act:
+                m["total_reward"] += 0.05  # Поощряем за попытку вызвать тул
+            # -------------------------------------------------
+
             if "Action:" not in act:
-                confirmed = len(act) > 3  # Считаем любой осмысленный текст подтверждением
+                confirmed = len(act) > 3
+                # Микро-штраф за длину болтовни, чтобы разные тексты давали разный reward
+                m["total_reward"] -= len(act) * 0.0001
+
                 obs, rew, done, _ = env.step(act)
+                m["total_reward"] += rew  # ВАЖНО: прибавляем reward от среды!
             else:
                 m["tool_calls"] += 1
+                # Сделали регулярку нечувствительной к регистру (?i), чтобы прощать ACTION:
                 match = re.search(r"(?i)Action:\s*(\w+)\('([^']+)'\)", act)
 
                 if not match:
                     m["invalid_actions"] += 1
                 else:
                     tool, arg = match.groups()
-                    # Проверяем policy rules
                     m["policy_violations"] += self.RULES["confirmation"](tool, confirmed) + self.RULES[
                         "hallucination"
                     ](arg, entities)
-                    confirmed = False  # Сброс после использования тула
+                    confirmed = False
 
                 obs, rew, done, _ = env.step(act)
-                entities |= get_ents(obs)  # Пополняем базу известных сущностей
+                m["total_reward"] += rew  # ВАЖНО: прибавляем промежуточный reward от тулов
+                entities |= get_ents(obs)
 
             if done:
                 m["success"] = rew > 0
                 break
 
-        # Reward: outcome-centric + shaping
+        # Считаем outcome + shaping
         outcome = 1.0 if m["success"] else -1.0
         shaping = (
             m["policy_violations"] * 0.5
@@ -219,6 +230,8 @@ class PendolfVerifier(TrajectoryVerifier):
             + m["steps"] * 0.05
             + m["tool_calls"] * 0.02
         )
+
+        # Добавляем outcome и вычитаем штрафы из того, что уже накопили
         m["total_reward"] += outcome - shaping
 
         return m

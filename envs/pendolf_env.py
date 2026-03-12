@@ -191,7 +191,7 @@ class PendolfVerifier(TrajectoryVerifier):
                 obs, rew, done, _ = env.step(act)
             else:
                 m["tool_calls"] += 1
-                match = re.search(r"Action:\s*(\w+)\('([^']+)'\)", act)
+                match = re.search(r"(?i)Action:\s*(\w+)\('([^']+)'\)", act)
 
                 if not match:
                     m["invalid_actions"] += 1

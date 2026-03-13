@@ -178,13 +178,14 @@ class PendolfVerifier(TrajectoryVerifier):
         entities = get_ents(data.question) | get_ents(data.metadata)
 
         confirmed, last_act = False, None
+        is_done = False  # Добавляем флаг, чтобы знать, дошла ли модель до конца
 
         for act in [a.strip() for a in actions[:max_steps] if a.strip()]:
             m["steps"] += 1
             m["loops"] += int(act == last_act)
             last_act = act
 
-            # --- ХЛЕБНЫЕ КРОШКИ (чтобы std не был равен 0) ---
+            # --- ХЛЕБНЫЕ КРОШКИ ---
             if "Мысль:" in act and m["steps"] < 3:
                 m["total_reward"] += 0.05
             if "Action:" in act and m["steps"] < 3:
@@ -193,14 +194,12 @@ class PendolfVerifier(TrajectoryVerifier):
 
             if "Action:" not in act:
                 confirmed = len(act) > 3
-                # Микро-штраф за длину болтовни, чтобы разные тексты давали разный reward
                 m["total_reward"] -= len(act) * 0.0001
 
                 obs, rew, done, _ = env.step(act)
-                m["total_reward"] += rew  # ВАЖНО: прибавляем reward от среды!
+                m["total_reward"] += rew
             else:
                 m["tool_calls"] += 1
-                # Сделали регулярку нечувствительной к регистру (?i), чтобы прощать ACTION:
                 match = re.search(r"(?i)Action:\s*(\w+)\('([^']+)'\)", act)
 
                 if not match:
@@ -213,15 +212,19 @@ class PendolfVerifier(TrajectoryVerifier):
                     confirmed = False
 
                 obs, rew, done, _ = env.step(act)
-                m["total_reward"] += rew  # ВАЖНО: прибавляем промежуточный reward от тулов
+                m["total_reward"] += rew
                 entities |= get_ents(obs)
 
+            # --- НОВАЯ ЖЕСТКАЯ ПРОВЕРКА УСПЕХА ---
             if done:
+                is_done = True
+                # Успех засчитывается ТОЛЬКО если последний шаг дал награду (например, "Держи монеты")
+                m["success"] = rew > 0
                 break
 
-        # Успех — это если мы заработали положительный reward от среды
-        # (например, +0.5 за take_item или +1.0 за финальную фразу)
-        m["success"] = m["total_reward"] > 0
+        # Если цикл закончился, а done так и не наступил — это провал (бросила квест на полпути)
+        if not is_done:
+            m["success"] = False
 
         # Считаем outcome + shaping
         outcome = 1.0 if m["success"] else -1.0

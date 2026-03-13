@@ -185,10 +185,10 @@ class PendolfVerifier(TrajectoryVerifier):
             last_act = act
 
             # --- ХЛЕБНЫЕ КРОШКИ (чтобы std не был равен 0) ---
-            if "Мысль:" in act:
-                m["total_reward"] += 0.05  # Поощряем за попытку думать
-            if "Action:" in act:
-                m["total_reward"] += 0.05  # Поощряем за попытку вызвать тул
+            if "Мысль:" in act and m["steps"] < 3:
+                m["total_reward"] += 0.05
+            if "Action:" in act and m["steps"] < 3:
+                m["total_reward"] += 0.05
             # -------------------------------------------------
 
             if "Action:" not in act:
@@ -229,7 +229,7 @@ class PendolfVerifier(TrajectoryVerifier):
             m["policy_violations"] * 0.5
             + m["invalid_actions"] * 0.3
             + m["loops"] * 0.3
-            + m["steps"] * 0.05
+            + m["steps"] * 0.1
             + m["tool_calls"] * 0.02
         )
 
